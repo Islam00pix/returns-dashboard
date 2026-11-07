@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Дашборд возвратов</title>
+  <link rel="stylesheet" href="/static/dark.css">
+</head>
+<body>
+  <header class="hero">
+    <div>
+      <h1>Дашборд возвратов</h1>
+      <p class="hero-copy">Возвраты по периоду, категориям, продавцам и товарам</p>
+    </div>
+  </header>
+
+  <main>
+    <section class="filter-panel" aria-label="Фильтры дашборда">
+      <div class="filter-field">
+        <label for="date-from">Дата с</label>
+        <input id="date-from" type="date">
+      </div>
+      <div class="filter-field">
+        <label for="date-to">Дата по</label>
+        <input id="date-to" type="date">
+      </div>
+
+      <div class="filter-field multi-filter" data-multiselect="categories">
+        <label id="categories-label">Категория</label>
+        <button id="categories-trigger" class="multi-trigger" type="button" aria-expanded="false" aria-controls="categories-menu" aria-labelledby="categories-label categories-summary">
+          <span id="categories-summary">Все категории</span><span class="chevron" aria-hidden="true">⌄</span>
+        </button>
+        <select id="categories" multiple hidden tabindex="-1" aria-hidden="true"></select>
+        <div id="categories-menu" class="multi-menu" hidden>
+          <label class="search-label" for="categories-search">Поиск категории</label>
+          <input id="categories-search" class="multi-search" type="search" autocomplete="off" placeholder="Начните вводить…">
+          <div id="categories-options" class="multi-options" role="listbox" aria-multiselectable="true"></div>
+          <button id="categories-clear" class="multi-clear" type="button">Очистить выбор</button>
+        </div>
+      </div>
+
+      <div class="filter-field multi-filter seller-filter" data-multiselect="sellers">
+        <label id="sellers-label">Продавец</label>
+        <button id="sellers-trigger" class="multi-trigger" type="button" aria-expanded="false" aria-controls="sellers-menu" aria-labelledby="sellers-label sellers-summary">
+          <span id="sellers-summary">Все продавцы</span><span class="chevron" aria-hidden="true">⌄</span>
+        </button>
+        <select id="sellers" multiple hidden tabindex="-1" aria-hidden="true"></select>
+        <div id="sellers-menu" class="multi-menu" hidden>
+          <label class="search-label" for="sellers-search">Поиск продавца</label>
+          <input id="sellers-search" class="multi-search" type="search" autocomplete="off" placeholder="Начните вводить…">
+          <div id="sellers-options" class="multi-options" role="listbox" aria-multiselectable="true"></div>
+          <button id="sellers-clear" class="multi-clear" type="button">Очистить выбор</button>
+        </div>
+      </div>
+
+      <div class="filter-actions">
+        <button id="apply" type="button">Применить</button>
+        <button id="reset" class="secondary" type="button">Сбросить</button>
+      </div>
+    </section>
+
+    <div id="notice" class="notice" role="status" aria-live="polite">Подключаем данные…</div>
+
+    <section class="kpi-grid" aria-label="Ключевые показатели">
+      <article class="kpi" data-analytic-element="1"><span>Сумма возвратов, руб.</span><strong id="kpi-return-amount">—</strong><small>по позициям с известной ценой</small></article>
+      <article class="kpi" data-analytic-element="2"><span>Доля возвратов в деньгах, %</span><strong id="kpi-money-rate">—</strong><small>от оборота выбранного среза</small></article>
+      <article class="kpi" data-analytic-element="3"><span>Возвращённые позиции, поз.</span><strong id="kpi-return-positions">—</strong><small>строк заказов</small></article>
+      <article class="kpi" data-analytic-element="4"><span>Доля возвратов в штуках, %</span><strong id="kpi-qty-rate">—</strong><small>от количества товаров</small></article>
+    </section>
+
+    <section class="chart-grid primary-chart">
+      <article class="chart-card chart-card-wide dynamic-card" data-analytic-element="5">
+        <div class="chart-title"><div><h3>Динамика возвратов: сумма и доля</h3><p>Сумма по месяцам и денежная доля возвратов</p></div></div>
+        <div class="canvas-wrap"><canvas id="monthly-combo"></canvas></div>
+        <p class="scale-note">Правая шкала доли увеличена для отображения изменений</p>
+      </article>
+    </section>
+
+    <section class="chart-grid chart-grid-two secondary-charts">
+      <article class="chart-card structure-card" data-analytic-element="6">
+        <div class="chart-title"><div><h3>Структура возвратов по месяцам</h3><p>Сумма по статусам возврата</p></div></div>
+        <div class="canvas-wrap"><canvas id="monthly-status"></canvas></div>
+      </article>
+      <article class="chart-card category-card" data-analytic-element="7">
+        <div class="chart-title"><div><h3>Доля возвратов по категориям</h3><p>Категории L1 · по убыванию доли</p></div></div>
+        <div class="canvas-wrap"><canvas id="category-rate"></canvas></div>
+        <p class="benchmark-note"><span class="benchmark-swatch"></span> Сравнение с общей долей выбранного среза, не норматив</p>
+      </article>
+    </section>
+
+    <section class="chart-grid detail-grid">
+      <article class="chart-card table-card" data-analytic-element="8">
+        <div class="chart-title"><div><h3>Продавцы: сумма и доля возвратов</h3><p id="seller-summary">Рейтинг выбранного периода</p></div></div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Продавец</th><th class="num-col">Всего, поз.</th><th class="num-col">Возвращено, поз.</th><th class="num-col key-col">Сумма возвратов, ₽</th><th class="num-col">Доля в деньгах, %</th></tr></thead>
+            <tbody id="seller-rows"></tbody>
+          </table>
+        </div>
+        <div class="pagination"><button id="seller-prev" class="secondary compact" type="button">Назад</button><span id="seller-page">—</span><button id="seller-next" class="secondary compact" type="button">Далее</button></div>
+      </article>
+
+      <article class="chart-card table-card" data-analytic-element="9">
+        <div class="chart-title"><div><h3>Топ товаров с высоким процентом возвратов</h3><p id="product-summary">Порог: не менее 20 позиций за выбранный период</p></div></div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Товар</th><th>Категория</th><th>Продавец</th><th class="num-col">Всего, поз.</th><th class="num-col">Возвращено, поз.</th><th class="num-col key-col">Доля позиций, %</th><th class="num-col">Сумма возвратов, ₽</th></tr></thead>
+            <tbody id="product-rows"></tbody>
+          </table>
+        </div>
+        <div class="pagination"><button id="product-prev" class="secondary compact" type="button">Назад</button><span id="product-page">—</span><button id="product-next" class="secondary compact" type="button">Далее</button></div>
+      </article>
+    </section>
+
+    <details class="data-note">
+      <summary>О данных</summary>
+      <div>
+        <p><strong id="data-missing-price">—</strong> позиций без цены не участвуют в денежных метриках.</p>
+        <p>Сумма позиции: количество × (цена покупки − скидка; пустая скидка считается нулём). Возвраты: <code>returned</code>, <code>not_redeemed</code>, <code>lost</code>. Доли рассчитаны от всех статусов выбранного среза.</p>
+      </div>
+    </details>
+  </main>
+  <script src="/static/chart.umd.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
