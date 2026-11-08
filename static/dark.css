@@ -108,7 +108,7 @@ button.secondary { border-color: var(--border); background: var(--field); color:
 .chart-grid { display: grid; gap: 12px; }
 .chart-grid-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .primary-chart { margin-top: 20px; }
-.secondary-charts, .detail-grid { margin-top: 12px; }
+.secondary-charts, .price-group-chart, .detail-grid { margin-top: 12px; }
 .chart-card { min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); }
 .chart-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .chart-title h3 { margin: 0; font-size: 15px; font-weight: 600; }
@@ -116,7 +116,9 @@ button.secondary { border-color: var(--border); background: var(--field); color:
 .canvas-wrap { position: relative; height: 320px; }
 .dynamic-card .canvas-wrap { height: 400px; }
 .secondary-charts .canvas-wrap { height: 360px; }
+.price-group-card .canvas-wrap { height: 360px; }
 .scale-note { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+.scale-note.warning { color: var(--red); }
 .benchmark-note { display: flex; align-items: center; gap: 7px; margin: 10px 0 0; color: var(--muted); font-size: 12px; }
 .benchmark-swatch { width: 20px; border-top: 2px dashed var(--blue); }
 

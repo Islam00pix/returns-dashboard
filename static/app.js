@@ -469,6 +469,72 @@ function renderCuts(data) {
   markAnalytic(7, [benchmark, ...rows.map((row) => [row.category_id, normalizePercent(row.return_rate_money_pct)])]);
 }
 
+function renderPriceGroups(rows) {
+  const rates = rows.map((row) => normalizePercent(row.return_rate_positions_pct));
+  const valueLabels = {
+    id: "priceGroupValueLabels",
+    afterDatasetsDraw(chart) {
+      const meta = chart.getDatasetMeta(0);
+      chart.ctx.save();
+      chart.ctx.fillStyle = palette.text;
+      chart.ctx.font = '600 11px Inter, "Segoe UI", system-ui, sans-serif';
+      chart.ctx.textAlign = "center";
+      chart.ctx.textBaseline = "bottom";
+      meta.data.forEach((bar, index) => {
+        const value = rates[index];
+        if (value === null) return;
+        chart.ctx.fillText(`${percent.format(value)}%`, bar.x, bar.y - 6);
+      });
+      chart.ctx.restore();
+    },
+  };
+  const options = baseOptions({ valueKind: "percent" });
+  options.plugins.legend.display = false;
+  options.plugins.tooltip.callbacks.title = (items) => rows[items[0]?.dataIndex]?.group_name || "";
+  options.plugins.tooltip.callbacks.label = (context) => {
+    const row = rows[context.dataIndex];
+    const rate = normalizePercent(row.return_rate_positions_pct);
+    return [
+      `Всего позиций: ${integer.format(row.total_positions)}`,
+      `Возвращённых позиций: ${integer.format(row.return_positions)}`,
+      `Доля возвратов по позициям: ${rate === null ? "—" : `${percent.format(rate)}%`}`,
+      `Сумма возвратов: ${row.return_amount === null ? "—" : moneyExact.format(asNumber(row.return_amount))}`,
+    ];
+  };
+  options.layout = { padding: { top: 24 } };
+  options.scales.y.beginAtZero = true;
+  options.scales.y.grace = "15%";
+  options.scales.y.title = { display: true, text: "%", color: palette.muted };
+  makeChart("price-groups", {
+    type: "bar",
+    data: {
+      labels: rows.map((row) => row.group_name),
+      datasets: [{
+        label: "Доля возвратов по позициям, %",
+        data: rates,
+        backgroundColor: palette.blue,
+        borderRadius: 3,
+        barPercentage: .68,
+      }],
+    },
+    options,
+    plugins: [valueLabels],
+  });
+  const invalid = rows.find((row) => row.group_key === "invalid");
+  const note = document.getElementById("price-group-note");
+  note.textContent = invalid
+    ? `Некорректная цена после скидки: ${integer.format(invalid.total_positions)} позиций`
+    : "Отрицательных цен после скидки не обнаружено";
+  note.classList.toggle("warning", Boolean(invalid));
+  markAnalytic(10, rows.map((row) => [
+    row.group_key,
+    row.total_positions,
+    row.return_positions,
+    normalizePercent(row.return_rate_positions_pct),
+    row.return_amount,
+  ]));
+}
+
 function cell(text, className = "") {
   const node = document.createElement("td");
   node.textContent = text;
@@ -567,6 +633,7 @@ async function loadDashboard() {
     setKpis(data.kpi);
     renderMonthly(data.monthly);
     renderCuts(data);
+    renderPriceGroups(data.price_groups || []);
     renderSellerTable();
     renderProductTable();
     setNotice(data.empty ? "Для выбранного среза данных нет." : `Готово · ${integer.format(data.kpi.total_positions)} позиций в выбранном срезе`);

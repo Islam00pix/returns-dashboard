@@ -51,6 +51,7 @@ INSERT INTO filtered_items (
     qty,
     status,
     created_at,
+    unit_price_after_discount,
     line_amount,
     is_return,
     price_missing
@@ -66,6 +67,7 @@ SELECT
     qty,
     status,
     created_at,
+    unit_price_after_discount,
     line_amount,
     is_return,
     price_missing
@@ -81,6 +83,10 @@ FROM (
         oi.qty,
         oi.status,
         oi.created_at,
+        CASE
+            WHEN oi.price_at_purchase IS NULL THEN NULL
+            ELSE oi.price_at_purchase - COALESCE(oi.discount_amount, 0)
+        END AS unit_price_after_discount,
         CASE
             WHEN oi.price_at_purchase IS NULL THEN NULL
             ELSE oi.qty * (oi.price_at_purchase - COALESCE(oi.discount_amount, 0))
@@ -114,6 +120,7 @@ CREATE TEMP TABLE filtered_items (
     qty BIGINT,
     status VARCHAR,
     created_at TIMESTAMP,
+    unit_price_after_discount DOUBLE,
     line_amount DOUBLE,
     is_return BOOLEAN,
     price_missing BOOLEAN
@@ -367,6 +374,89 @@ def _categories(con) -> list[dict]:
     return result
 
 
+def _price_groups(con) -> list[dict]:
+    rows = _rows(
+        con,
+        """
+        WITH classified AS (
+            SELECT
+                CASE
+                    WHEN unit_price_after_discount IS NULL THEN 'missing'
+                    WHEN unit_price_after_discount < 0 THEN 'invalid'
+                    WHEN unit_price_after_discount < 1000 THEN 'under_1000'
+                    WHEN unit_price_after_discount < 5000 THEN '1000_4999'
+                    WHEN unit_price_after_discount < 15000 THEN '5000_14999'
+                    ELSE '15000_plus'
+                END AS group_key,
+                is_return,
+                line_amount
+            FROM filtered_items
+        ),
+        aggregated AS (
+            SELECT
+                group_key,
+                COUNT(*) AS total_positions,
+                COUNT(*) FILTER (WHERE is_return) AS return_positions,
+                SUM(line_amount) FILTER (WHERE is_return) AS return_amount
+            FROM classified
+            GROUP BY group_key
+        )
+        SELECT
+            groups.group_key,
+            groups.group_name,
+            groups.sort_order,
+            COALESCE(aggregated.total_positions, 0) AS total_positions,
+            COALESCE(aggregated.return_positions, 0) AS return_positions,
+            aggregated.return_amount
+        FROM (
+            VALUES
+                ('invalid', 'Некорректная цена', 0),
+                ('under_1000', 'До 1 000 ₽', 1),
+                ('1000_4999', '1 000–4 999 ₽', 2),
+                ('5000_14999', '5 000–14 999 ₽', 3),
+                ('15000_plus', 'От 15 000 ₽', 4),
+                ('missing', 'Цена не указана', 5)
+        ) AS groups(group_key, group_name, sort_order)
+        LEFT JOIN aggregated USING (group_key)
+        WHERE groups.group_key <> 'invalid'
+           OR COALESCE(aggregated.total_positions, 0) > 0
+        ORDER BY groups.sort_order
+        """,
+    )
+    result = []
+    for row in rows:
+        total_positions = int(row["total_positions"] or 0)
+        return_positions = int(row["return_positions"] or 0)
+        result.append(
+            {
+                "group_key": row["group_key"],
+                "group_name": row["group_name"],
+                "total_positions": total_positions,
+                "return_positions": return_positions,
+                "return_rate_positions_pct": percent_points(return_positions, total_positions),
+                "return_amount": None
+                if row["group_key"] == "missing"
+                else known_amount(row["return_amount"], return_positions),
+            }
+        )
+    return result
+
+
+def _validate_price_groups(kpi: dict, groups: list[dict]) -> None:
+    if sum(item["total_positions"] for item in groups) != kpi["total_positions"]:
+        raise QueryError("Ценовые группы не покрывают все позиции выбранного среза.")
+    if sum(item["return_positions"] for item in groups) != kpi["return_positions"]:
+        raise QueryError("Возвратные позиции не сходятся по ценовым группам.")
+    if kpi["return_amount"] is None:
+        return
+    grouped_amount = sum(
+        (Decimal(item["return_amount"]) for item in groups if item["return_amount"] is not None),
+        Decimal("0"),
+    )
+    if abs(grouped_amount - Decimal(kpi["return_amount"])) > Decimal("0.01"):
+        raise QueryError("Сумма возвратов не сходится по ценовым группам.")
+
+
 def _sellers(con) -> list[dict]:
     rows = _rows(
         con,
@@ -465,11 +555,15 @@ def load_bundle(filters: Filters) -> dict:
         try:
             _prepare(con, filters)
             kpi, empty = _kpi(con)
+            price_groups = [] if empty else _price_groups(con)
+            if not empty:
+                _validate_price_groups(kpi, price_groups)
             bundle = {
                 "empty": empty,
                 "kpi": kpi,
                 "monthly": [] if empty else _monthly(con),
                 "categories": [] if empty else _categories(con),
+                "price_groups": price_groups,
                 "sellers": [] if empty else _sellers(con),
                 "products": [] if empty else _products(con),
             }
